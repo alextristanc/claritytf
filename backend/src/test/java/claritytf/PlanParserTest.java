@@ -37,4 +37,12 @@ class PlanParserTest {
         var e = assertThrows(PlanException.class, () -> parser.parse("{}".getBytes()));
         assertEquals(PlanException.Code.NOT_A_PLAN, e.code);
     }
+
+    @Test void aristas() throws Exception {
+    var m = parser.parse(fixture("plan.json"));
+    assertEquals(2, m.edges().size());
+    assertTrue(m.edges().contains(new Model.Edge("module.red.aws_vpc.main", "module.red.aws_subnet.a")));
+    assertTrue(m.edges().contains(new Model.Edge("module.red.aws_subnet.a", "aws_instance.web")));
+    }
+
 }
