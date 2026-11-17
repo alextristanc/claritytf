@@ -40,6 +40,13 @@ public class PlanParser {
         else if (!"1".equals(formatVersion.split("\\.")[0]))
             warnings.add("format_version " + formatVersion + " no soportada (se espera 1.x)");
 
+        // Plan parcial (-target, -refresh=false) o con errores: advertencia, no bloquea.
+        // El campo ausente es neutro: no todos los planes lo incluyen.
+        if (root.path("complete").isBoolean() && !root.path("complete").booleanValue())
+            warnings.add("El plan está incompleto (complete: false): puede faltar configuración o cambios");
+        if (root.path("errored").isBoolean() && root.path("errored").booleanValue())
+            warnings.add("El plan contiene errores (errored: true)");
+
         if (warnings.size() == model.warnings().size()) return model;
         return new Model.GraphModel(model.schemaVersion(), model.nodes(), model.edges(),
             model.modules(), warnings);
