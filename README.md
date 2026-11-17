@@ -1,6 +1,6 @@
 # ClarityTF
 
-> Arrastra tu plan de Terraform y ve, en 5 segundos, qué se crea, qué se rompe y qué depende de qué.
+Aplicación web que recibe planes JSON de Terraform y muestra diagramas interactivos de la infraestructura.
 
 ---
 
