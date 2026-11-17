@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ReactFlow, Background, Controls, Handle, MarkerType, Position } from '@xyflow/react';
-import type { Node, Edge, NodeProps } from '@xyflow/react';
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  useReactFlow,
+} from '@xyflow/react';
+import type { Edge, Node, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Action, GraphModel } from './types';
 import { layout, NODE_W, NODE_H } from './layout';
@@ -9,55 +18,73 @@ import type { Box } from './layout';
 import { dependents } from './useImpact';
 import { COLORS, GLYPHS } from './theme';
 
-// Insignia para bloques con varias instancias (count/for_each).
-const badgeStyle: CSSProperties = {
-  position: 'absolute', top: 2, right: 2, background: '#111', color: '#fff',
-  borderRadius: 8, padding: '0 5px', fontSize: 10, fontWeight: 700, lineHeight: '16px',
-};
+interface ResourceData {
+  type: string;
+  name: string;
+  action: Action;
+  instances: number;
+}
+
+interface ModuleData {
+  label: string;
+  instances: number;
+  depth: number;
+}
 
 function ModuleGroup({ data }: NodeProps) {
-  const d = data as { label: string; instances: number };
+  const d = data as unknown as ModuleData;
   return (
-    <div style={{
-      position: 'relative',
-      width: '100%', height: '100%', boxSizing: 'border-box',
-      border: '2px dashed #94a3b8', borderRadius: 8, background: 'rgba(148,163,184,0.12)',
-      padding: 8, fontSize: 12, fontWeight: 600, color: '#475569',
-    }}>
-      {d.label}
+    <div className={`tf-module${d.depth > 2 ? ' is-nested' : ''}`}>
+      <span className="tf-module-label">{d.label}</span>
       {d.instances > 1 && (
-        <span style={badgeStyle} title={`${d.instances} instancias`}>×{d.instances}</span>
+        <span className="node-badge" title={`${d.instances} instancias`}>×{d.instances}</span>
       )}
     </div>
   );
 }
 
 function ResourceNode({ data }: NodeProps) {
-  const d = data as { type: string; name: string; action: Action; instances: number };
+  const d = data as unknown as ResourceData;
   const glyph = GLYPHS[d.action];
   return (
-    <div style={{
-      position: 'relative', width: '100%', height: '100%',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      textAlign: 'center',
-    }}>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      {glyph && (
-        <span title="Acciones distintas" style={{ position: 'absolute', top: 0, left: 4, fontSize: 11 }}>
-          {glyph}
-        </span>
-      )}
-      <span>{d.type}</span>
-      <span>{d.name}</span>
+    <div className="node-card">
+      <Handle type="target" position={Position.Left} className="tf-handle" />
+      <span className="node-type">
+        {glyph && <span className="node-glyph" title="Acciones distintas">{glyph}</span>}
+        <span className="node-type-text" title={d.type}>{d.type}</span>
+      </span>
+      <span className="node-name" title={d.name}>{d.name}</span>
       {d.instances > 1 && (
-        <span style={badgeStyle} title={`${d.instances} instancias`}>×{d.instances}</span>
+        <span className="node-badge" title={`${d.instances} instancias`}>×{d.instances}</span>
       )}
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Right} className="tf-handle" />
     </div>
   );
 }
 
 const nodeTypes = { module: ModuleGroup, resource: ResourceNode };
+
+// Reencuadra el grafo cuando cambia el tamaño del lienzo (p. ej. al abrir el panel).
+function FitOnResize() {
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    const el = document.querySelector('.react-flow');
+    if (!el) return;
+    let timer: number | undefined;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void fitView({ padding: 0.14 }); }, 160);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [fitView]);
+
+  return null;
+}
 
 const depth = (id: string) => id.split('.module.').length;
 
@@ -94,7 +121,7 @@ export default function Graph({ model, selected, onSelect }: Props) {
         type: 'module',
         position: { x: b?.x ?? 0, y: b?.y ?? 0 },
         parentId: m.parent && boxes.has(m.parent) ? m.parent : undefined,
-        data: { label: m.id, instances: m.instances },
+        data: { label: m.id, instances: m.instances, depth: depth(m.id) },
         style: { width: b?.width, height: b?.height },
         selectable: false,
       };
@@ -103,6 +130,7 @@ export default function Graph({ model, selected, onSelect }: Props) {
     const resourceNodes: Node[] = model.nodes.map(n => {
       const b = boxes.get(n.id);
       const parent = n.module && boxes.has(n.module) ? n.module : undefined;
+      const dim = impact !== null && !impact.has(n.id);
       return {
         id: n.id,
         type: 'resource',
@@ -111,15 +139,18 @@ export default function Graph({ model, selected, onSelect }: Props) {
         extent: parent ? ('parent' as const) : undefined,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
+        className: [
+          'tf-node',
+          n.action === 'mixed' ? 'is-mixed' : '',
+          n.id === selected ? 'is-selected' : '',
+          dim ? 'is-dim' : '',
+        ].filter(Boolean).join(' '),
         data: { type: n.type, name: n.name, action: n.action, instances: n.instances.length },
         style: {
-          width: NODE_W, height: NODE_H, padding: 4, fontSize: 12,
-          background: COLORS[n.action], color: '#111',
-          border: n.id === selected ? '3px solid #111'
-            : n.action === 'mixed' ? '1px dashed #6b7280'
-            : '1px solid #555',
-          opacity: impact && !impact.has(n.id) ? 0.25 : 1,
-        },
+          width: NODE_W,
+          height: NODE_H,
+          '--node-color': COLORS[n.action],
+        } as CSSProperties,
       };
     });
 
@@ -130,19 +161,32 @@ export default function Graph({ model, selected, onSelect }: Props) {
     () =>
       model.edges.map(e => {
         const dim = impact !== null && !(impact.has(e.from) && impact.has(e.to));
+        const active = impact !== null && !dim;
+        const color = active ? '#22d3ee' : 'rgba(148, 163, 184, 0.5)';
         return {
           id: `${e.from}->${e.to}`,
           source: e.from,
           target: e.to,
-          markerEnd: { type: MarkerType.ArrowClosed },
-          animated: impact !== null && !dim,
-          style: { opacity: dim ? 0.15 : 1 },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
+          animated: active,
+          style: {
+            stroke: color,
+            strokeWidth: active ? 1.8 : 1.25,
+            opacity: dim ? 0.1 : 1,
+          },
         };
       }),
     [model, impact],
   );
 
-  if (!boxes) return <div style={{ padding: 16, color: '#666' }}>Calculando layout…</div>;
+  if (!boxes) {
+    return (
+      <div className="graph-loading" role="status">
+        <span className="spinner" aria-hidden="true" />
+        Calculando layout…
+      </div>
+    );
+  }
 
   return (
     <ReactFlow
@@ -150,12 +194,27 @@ export default function Graph({ model, selected, onSelect }: Props) {
       edges={edges}
       nodeTypes={nodeTypes}
       fitView
+      fitViewOptions={{ padding: 0.14 }}
+      minZoom={0.2}
+      maxZoom={1.8}
       nodesConnectable={false}
+      ariaLabelConfig={{
+        'controls.ariaLabel': 'Controles del grafo',
+        'controls.zoomIn.ariaLabel': 'Acercar',
+        'controls.zoomOut.ariaLabel': 'Alejar',
+        'controls.fitView.ariaLabel': 'Ajustar vista',
+      }}
       onNodeClick={(_, n) => { if (n.type !== 'module') onSelect(n.id); }}
       onPaneClick={() => onSelect(null)}
     >
-      <Background />
-      <Controls position="bottom-right" />
+      <FitOnResize />
+      <Background
+        variant={BackgroundVariant.Dots}
+        gap={26}
+        size={1.2}
+        color="rgba(148, 163, 184, 0.18)"
+      />
+      <Controls position="bottom-right" showInteractive={false} />
     </ReactFlow>
   );
 }

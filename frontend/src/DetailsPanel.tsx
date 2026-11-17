@@ -13,9 +13,12 @@ function fmt(v: unknown): string {
 function NameList({ title, names }: { title: string; names: string[] }) {
   if (names.length === 0) return null;
   return (
-    <section style={{ marginTop: 12 }}>
-      <div style={{ fontWeight: 600 }}>{title} ({names.length})</div>
-      <ul style={{ margin: '4px 0 0 18px', padding: 0, wordBreak: 'break-all' }}>
+    <section className="panel-section">
+      <h3 className="panel-section-title">
+        {title}
+        <span className="count-pill">{names.length}</span>
+      </h3>
+      <ul className="panel-list">
         {names.map(n => <li key={n}>{n}</li>)}
       </ul>
     </section>
@@ -30,34 +33,52 @@ export default function DetailsPanel({ node, onClose }: { node: GraphNode; onClo
   const { known, withoutValue } = splitValues(instance?.values);
 
   return (
-    <aside style={{ width: 320, borderLeft: '1px solid #ddd', padding: 16, overflow: 'auto', fontSize: 14, background: '#fff', color: '#111' }}>
-      <button onClick={onClose} style={{ float: 'right' }}>✕</button>
-      <span style={{ background: COLORS[node.action], padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-        {GLYPHS[node.action] ? `${GLYPHS[node.action]} ` : ''}{LABELS[node.action]}
-      </span>
-      <h3 style={{ margin: '12px 0 4px' }}>{node.name}</h3>
-      <div style={{ color: '#555' }}>{node.type}</div>
-      <div style={{ color: '#555', wordBreak: 'break-all' }}>{node.id}</div>
-      {node.module && <div style={{ color: '#555' }}>Módulo: {node.module}</div>}
-      <hr />
+    <aside className="details-panel" aria-labelledby="panel-title">
+      <div className="sheet-handle" aria-hidden="true" />
+
+      <header className="panel-head">
+        <div className="panel-head-row">
+          <span className="action-badge" style={{ background: COLORS[node.action] }}>
+            {GLYPHS[node.action] ? `${GLYPHS[node.action]} ` : ''}{LABELS[node.action]}
+          </span>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Cerrar panel">
+            ✕
+          </button>
+        </div>
+        <h2 className="panel-title" id="panel-title">{node.name}</h2>
+        <div className="panel-type">{node.type}</div>
+        <div className="panel-id">{node.id}</div>
+        {node.module && (
+          <div className="panel-module">Módulo: <code>{node.module}</code></div>
+        )}
+      </header>
 
       {node.instances.length > 1 && (
-        <section>
-          <div style={{ fontWeight: 600 }}>Instancias ({node.instances.length})</div>
-          {node.instances.map((inst, i) => (
-            <label key={inst.address} style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4, cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name={`instancia-${node.id}`}
-                checked={i === selected}
-                onChange={() => setIndex(i)}
-              />
-              <span style={{ background: COLORS[inst.action], padding: '0 6px', borderRadius: 4, fontSize: 12 }}>
-                {LABELS[inst.action]}
-              </span>
-              <span style={{ wordBreak: 'break-all' }}>{inst.address}</span>
-            </label>
-          ))}
+        <section className="panel-section">
+          <h3 className="panel-section-title">
+            Instancias
+            <span className="count-pill">{node.instances.length}</span>
+          </h3>
+          <div className="instance-list" role="radiogroup" aria-label="Instancias del bloque">
+            {node.instances.map((inst, i) => (
+              <label
+                key={inst.address}
+                className={`instance-option${i === selected ? ' is-selected' : ''}`}
+              >
+                <input
+                  className="instance-radio"
+                  type="radio"
+                  name={`instancia-${node.id}`}
+                  checked={i === selected}
+                  onChange={() => setIndex(i)}
+                />
+                <span className="instance-action" style={{ background: COLORS[inst.action] }}>
+                  {LABELS[inst.action]}
+                </span>
+                <span className="instance-address">{inst.address}</span>
+              </label>
+            ))}
+          </div>
         </section>
       )}
 
@@ -65,38 +86,42 @@ export default function DetailsPanel({ node, onClose }: { node: GraphNode; onClo
       <NameList title="Valores sensibles ocultos" names={instance?.sensitive ?? []} />
 
       {node.unresolved.length > 0 && (
-        <section style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 600 }}>Dependencias no trazables</div>
-          <ul style={{ margin: '4px 0 0 18px', padding: 0, wordBreak: 'break-all' }}>
+        <section className="panel-section">
+          <h3 className="panel-section-title">
+            Dependencias no trazables
+            <span className="count-pill">{node.unresolved.length}</span>
+          </h3>
+          <ul className="panel-list">
             {node.unresolved.map(r => <li key={r}>{r}</li>)}
           </ul>
-          <p style={{ color: '#555', margin: '4px 0 0', fontSize: 12 }}>
+          <p className="panel-note">
             Terraform las declara pero el plan no permite trazarlas.
           </p>
         </section>
       )}
 
-      <section style={{ marginTop: 12 }}>
-        {known.length === 0 && <p style={{ color: '#777' }}>Sin valores conocidos.</p>}
-        {known.map(([k, v]) => (
-          <div key={k} style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 600 }}>{k}</div>
-            <div style={{ wordBreak: 'break-all' }}>{fmt(v)}</div>
-          </div>
-        ))}
+      <section className="panel-section">
+        <h3 className="panel-section-title">Valores</h3>
+        {known.length === 0 && <p className="panel-empty">Sin valores conocidos.</p>}
+        <div className="value-list">
+          {known.map(([k, v]) => (
+            <div key={k} className="value-row">
+              <span className="value-key">{k}</span>
+              <span className="value-val">{fmt(v)}</span>
+            </div>
+          ))}
+        </div>
         {withoutValue.length > 0 && (
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: 'pointer', color: '#555' }}>
-              {withoutValue.length} sin valor
-            </summary>
-            <ul style={{ margin: '4px 0 0 18px', padding: 0, wordBreak: 'break-all' }}>
+          <details className="panel-details">
+            <summary>{withoutValue.length} sin valor</summary>
+            <ul className="panel-list">
               {withoutValue.map(k => <li key={k}>{k}</li>)}
             </ul>
           </details>
         )}
       </section>
 
-      <p style={{ color: '#666', marginTop: 16, fontSize: 12 }}>
+      <p className="panel-footer">
         Los valores son de la instancia seleccionada. Las flechas conectan bloques, no instancias.
       </p>
     </aside>

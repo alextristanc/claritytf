@@ -1,13 +1,14 @@
 import type { Action } from './types';
 
-// Colores por acción: compartidos por el grafo, la leyenda y el panel de detalles.
+// Colores por acción: acentos vivos sobre fondo oscuro. Se usan como borde/glow
+// de los nodos y como fondo de las insignias de la leyenda y del panel.
 export const COLORS: Record<Action, string> = {
-  create: '#86efac',
-  update: '#fde68a',
+  create: '#6ee7b7',
+  update: '#fcd34d',
   delete: '#fca5a5',
   replace: '#fdba74',
-  'no-op': '#bfdbfe',
-  mixed: '#d1d5db',
+  'no-op': '#93c5fd',
+  mixed: '#cbd5e1',
 };
 
 // Etiquetas en español usadas en la leyenda y en el panel de detalles.
