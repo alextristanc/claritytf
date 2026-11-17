@@ -153,6 +153,23 @@ class PlanParserTest {
         assertInvariants(m);
     }
 
+    @Test void versionDeFormato() {
+        String rc = "[{\"address\":\"a.x\",\"type\":\"a\",\"name\":\"x\",\"change\":{\"actions\":[\"create\"],\"after\":{}}}]";
+        String conVersion = "{\"format_version\":\"%s\",\"resource_changes\":%s,\"configuration\":{\"root_module\":{}}}";
+
+        var soportada = parser.parse(String.format(conVersion, "1.2", rc).getBytes());
+        assertTrue(soportada.warnings().stream().noneMatch(w -> w.contains("format_version")),
+            "1.x no debe advertir: " + soportada.warnings());
+
+        var futura = parser.parse(String.format(conVersion, "2.0", rc).getBytes());
+        assertTrue(futura.warnings().stream().anyMatch(w -> w.contains("format_version")),
+            "2.0 debe advertir: " + futura.warnings());
+
+        var ausente = parser.parse(String.format(BASE, rc).getBytes());
+        assertTrue(ausente.warnings().stream().anyMatch(w -> w.contains("format_version")),
+            "Sin format_version debe advertir: " + ausente.warnings());
+    }
+
     @Test void dependsOnDeModulosCompletos() throws Exception {
         var m = parser.parse(fixture("plan-dependencias.json"));
         // (b) depends_on del module_call: la VPC precede a todos los recursos de base.
