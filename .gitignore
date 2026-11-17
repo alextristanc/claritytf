@@ -4,3 +4,4 @@ node_modules/
 .terraform/
 *.tfstate*
 *.tfplan
+dependency-reduced-pom.xml
