@@ -73,8 +73,13 @@ public class GraphExtractor {
 
         JsonNode rootModule = root.path("configuration").path("root_module");
         Map<String, Set<String>> outputs = new HashMap<>();
-        // varias pasadas: un módulo puede usar outputs de otro que se procesa después
-        for (int i = 0; i < 3; i++) collectOutputs(rootModule, "", Map.of(), outputs);
+        // Repetir hasta que las salidas se estabilicen: un output puede depender de
+        // otro módulo que todavía no se ha procesado. Tope de seguridad: 50 pasadas.
+        for (int i = 0; i < 50; i++) {
+            Map<String, Set<String>> before = new HashMap<>(outputs);
+            collectOutputs(rootModule, "", Map.of(), outputs);
+            if (before.equals(outputs)) break;
+        }
 
         Set<Model.Edge> edges = new LinkedHashSet<>();
         walk(rootModule, "", Map.of(), byBase, outputs, edges);
