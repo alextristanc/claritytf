@@ -1,25 +1,63 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, MarkerType, Position } from '@xyflow/react';
+import type { CSSProperties } from 'react';
+import { ReactFlow, Background, Controls, Handle, MarkerType, Position } from '@xyflow/react';
 import type { Node, Edge, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { GraphModel } from './types';
+import type { Action, GraphModel } from './types';
 import { layout, NODE_W, NODE_H } from './layout';
 import type { Box } from './layout';
 import { dependents } from './useImpact';
-import { COLORS } from './theme';
+import { COLORS, GLYPHS } from './theme';
+
+// Insignia para bloques con varias instancias (count/for_each).
+const badgeStyle: CSSProperties = {
+  position: 'absolute', top: 2, right: 2, background: '#111', color: '#fff',
+  borderRadius: 8, padding: '0 5px', fontSize: 10, fontWeight: 700, lineHeight: '16px',
+};
 
 function ModuleGroup({ data }: NodeProps) {
+  const d = data as { label: string; instances: number };
   return (
     <div style={{
+      position: 'relative',
       width: '100%', height: '100%', boxSizing: 'border-box',
       border: '2px dashed #94a3b8', borderRadius: 8, background: 'rgba(148,163,184,0.12)',
       padding: 8, fontSize: 12, fontWeight: 600, color: '#475569',
     }}>
-      {(data as { label: string }).label}
+      {d.label}
+      {d.instances > 1 && (
+        <span style={badgeStyle} title={`${d.instances} instancias`}>×{d.instances}</span>
+      )}
     </div>
   );
 }
-const nodeTypes = { module: ModuleGroup };
+
+function ResourceNode({ data }: NodeProps) {
+  const d = data as { type: string; name: string; action: Action; instances: number };
+  const glyph = GLYPHS[d.action];
+  return (
+    <div style={{
+      position: 'relative', width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      textAlign: 'center',
+    }}>
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      {glyph && (
+        <span title="Acciones distintas" style={{ position: 'absolute', top: 0, left: 4, fontSize: 11 }}>
+          {glyph}
+        </span>
+      )}
+      <span>{d.type}</span>
+      <span>{d.name}</span>
+      {d.instances > 1 && (
+        <span style={badgeStyle} title={`${d.instances} instancias`}>×{d.instances}</span>
+      )}
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    </div>
+  );
+}
+
+const nodeTypes = { module: ModuleGroup, resource: ResourceNode };
 
 const depth = (id: string) => id.split('.module.').length;
 
@@ -56,7 +94,7 @@ export default function Graph({ model, selected, onSelect }: Props) {
         type: 'module',
         position: { x: b?.x ?? 0, y: b?.y ?? 0 },
         parentId: m.parent && boxes.has(m.parent) ? m.parent : undefined,
-        data: { label: m.id },
+        data: { label: m.id, instances: m.instances },
         style: { width: b?.width, height: b?.height },
         selectable: false,
       };
@@ -67,17 +105,19 @@ export default function Graph({ model, selected, onSelect }: Props) {
       const parent = n.module && boxes.has(n.module) ? n.module : undefined;
       return {
         id: n.id,
+        type: 'resource',
         position: { x: b?.x ?? 0, y: b?.y ?? 0 },
         parentId: parent,
         extent: parent ? ('parent' as const) : undefined,
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: { label: `${n.type}\n${n.name}` },
+        data: { type: n.type, name: n.name, action: n.action, instances: n.instances.length },
         style: {
           width: NODE_W, height: NODE_H, padding: 4, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-          background: COLORS[n.action], color: '#111', whiteSpace: 'pre-line',
-          border: n.id === selected ? '3px solid #111' : '1px solid #555',
+          background: COLORS[n.action], color: '#111',
+          border: n.id === selected ? '3px solid #111'
+            : n.action === 'mixed' ? '1px dashed #6b7280'
+            : '1px solid #555',
           opacity: impact && !impact.has(n.id) ? 0.25 : 1,
         },
       };

@@ -1,9 +1,10 @@
 import type { GraphModel } from '../types';
 
 // Modelo sintético: no proviene de `terraform show` sino que se escribió a mano
-// para la demo. Mezcla las cinco acciones, módulos anidados y for_each.
+// para la demo. Mezcla las seis acciones de bloque (incluida "mixed"), módulos
+// anidados, un bloque con dos instancias y referencias no trazables.
 const mixto: GraphModel = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   nodes: [
     {
       id: 'aws_s3_bucket.logs',
@@ -11,11 +12,18 @@ const mixto: GraphModel = {
       name: 'logs',
       module: null,
       action: 'create',
-      values: {
-        bucket: 'claritytf-logs-demo',
-        force_destroy: false,
-        tags: { Entorno: 'demo' },
-      },
+      instances: [{
+        address: 'aws_s3_bucket.logs',
+        action: 'create',
+        values: {
+          bucket: 'claritytf-logs-demo',
+          force_destroy: false,
+          tags: { Entorno: 'demo' },
+        },
+        unknown: ['arn'],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'aws_iam_role.app',
@@ -23,11 +31,18 @@ const mixto: GraphModel = {
       name: 'app',
       module: null,
       action: 'no-op',
-      values: {
-        name: 'claritytf-app',
-        path: '/',
-        assume_role_policy: '{"Version":"2012-10-17","Statement":[...]}',
-      },
+      instances: [{
+        address: 'aws_iam_role.app',
+        action: 'no-op',
+        values: {
+          name: 'claritytf-app',
+          path: '/',
+          assume_role_policy: '{"Version":"2012-10-17","Statement":[...]}',
+        },
+        unknown: ['arn'],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'aws_iam_role_policy_attachment.app',
@@ -35,36 +50,52 @@ const mixto: GraphModel = {
       name: 'app',
       module: null,
       action: 'create',
-      values: {
-        role: 'claritytf-app',
-        policy_arn: 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess',
-      },
+      instances: [{
+        address: 'aws_iam_role_policy_attachment.app',
+        action: 'create',
+        values: {
+          role: 'claritytf-app',
+          policy_arn: 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess',
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
-      id: 'aws_instance.web["a"]',
+      // Dos instancias con acciones distintas: el bloque se agrega como "mixed".
+      id: 'aws_instance.web',
       type: 'aws_instance',
-      name: 'web["a"]',
+      name: 'web',
       module: null,
-      action: 'create',
-      values: {
-        ami: 'ami-0abcdef1234567890',
-        instance_type: 't3.micro',
-        subnet_id: 'subnet-a',
-        tags: { Nombre: 'web-a' },
-      },
-    },
-    {
-      id: 'aws_instance.web["b"]',
-      type: 'aws_instance',
-      name: 'web["b"]',
-      module: null,
-      action: 'update',
-      values: {
-        ami: 'ami-0abcdef1234567890',
-        instance_type: 't3.small',
-        subnet_id: 'subnet-b',
-        tags: { Nombre: 'web-b' },
-      },
+      action: 'mixed',
+      instances: [
+        {
+          address: 'aws_instance.web["a"]',
+          action: 'create',
+          values: {
+            ami: 'ami-0abcdef1234567890',
+            instance_type: 't3.micro',
+            subnet_id: 'subnet-a',
+            tags: { Nombre: 'web-a' },
+          },
+          unknown: ['public_ip', 'private_ip'],
+          sensitive: [],
+        },
+        {
+          address: 'aws_instance.web["b"]',
+          action: 'update',
+          values: {
+            ami: 'ami-0abcdef1234567890',
+            instance_type: 't3.small',
+            subnet_id: 'subnet-b',
+            tags: { Nombre: 'web-b' },
+          },
+          unknown: ['public_ip', 'private_ip'],
+          sensitive: [],
+        },
+      ],
+      unresolved: [],
     },
     {
       id: 'aws_eip.web',
@@ -72,10 +103,17 @@ const mixto: GraphModel = {
       name: 'web',
       module: null,
       action: 'replace',
-      values: {
-        domain: 'vpc',
-        instance: 'i-0a1b2c3d4e5f',
-      },
+      instances: [{
+        address: 'aws_eip.web',
+        action: 'replace',
+        values: {
+          domain: 'vpc',
+          instance: 'i-0a1b2c3d4e5f',
+        },
+        unknown: ['public_ip', 'public_dns'],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'aws_db_instance.primary',
@@ -83,13 +121,21 @@ const mixto: GraphModel = {
       name: 'primary',
       module: null,
       action: 'replace',
-      values: {
-        engine: 'postgres',
-        engine_version: '16.3',
-        instance_class: 'db.t4g.micro',
-        allocated_storage: 20,
-        storage_encrypted: true,
-      },
+      instances: [{
+        address: 'aws_db_instance.primary',
+        action: 'replace',
+        values: {
+          engine: 'postgres',
+          engine_version: '16.3',
+          instance_class: 'db.t4g.micro',
+          allocated_storage: 20,
+          storage_encrypted: true,
+        },
+        unknown: ['endpoint', 'id'],
+        sensitive: ['password'],
+      }],
+      // El plan no expone la expresión del data source: se marca, no se inventa la arista.
+      unresolved: ['data.aws_subnet'],
     },
     {
       id: 'module.red.aws_vpc.main',
@@ -97,11 +143,18 @@ const mixto: GraphModel = {
       name: 'main',
       module: 'module.red',
       action: 'no-op',
-      values: {
-        cidr_block: '10.0.0.0/16',
-        enable_dns_support: true,
-        tags: { Nombre: 'red-demo' },
-      },
+      instances: [{
+        address: 'module.red.aws_vpc.main',
+        action: 'no-op',
+        values: {
+          cidr_block: '10.0.0.0/16',
+          enable_dns_support: true,
+          tags: { Nombre: 'red-demo' },
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'module.red.aws_subnet.a',
@@ -109,11 +162,18 @@ const mixto: GraphModel = {
       name: 'a',
       module: 'module.red',
       action: 'create',
-      values: {
-        cidr_block: '10.0.1.0/24',
-        vpc_id: 'vpc-demo',
-        map_public_ip_on_launch: true,
-      },
+      instances: [{
+        address: 'module.red.aws_subnet.a',
+        action: 'create',
+        values: {
+          cidr_block: '10.0.1.0/24',
+          vpc_id: 'vpc-demo',
+          map_public_ip_on_launch: true,
+        },
+        unknown: ['arn'],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'module.red.aws_subnet.b',
@@ -121,11 +181,18 @@ const mixto: GraphModel = {
       name: 'b',
       module: 'module.red',
       action: 'delete',
-      values: {
-        cidr_block: '10.0.2.0/24',
-        vpc_id: 'vpc-demo',
-        map_public_ip_on_launch: false,
-      },
+      instances: [{
+        address: 'module.red.aws_subnet.b',
+        action: 'delete',
+        values: {
+          cidr_block: '10.0.2.0/24',
+          vpc_id: 'vpc-demo',
+          map_public_ip_on_launch: false,
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'module.red.module.seguridad.aws_security_group.web',
@@ -133,11 +200,19 @@ const mixto: GraphModel = {
       name: 'web',
       module: 'module.red.module.seguridad',
       action: 'update',
-      values: {
-        name: 'web-demo',
-        vpc_id: 'vpc-demo',
-        description: 'Acceso HTTP/HTTPS',
-      },
+      instances: [{
+        address: 'module.red.module.seguridad.aws_security_group.web',
+        action: 'update',
+        values: {
+          name: 'web-demo',
+          vpc_id: 'vpc-demo',
+          description: 'Acceso HTTP/HTTPS',
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      // Un local no aparece en el plan: se marca como no trazable.
+      unresolved: ['local.vpc_id'],
     },
     {
       id: 'module.red.module.seguridad.aws_security_group_rule.ingress',
@@ -145,13 +220,20 @@ const mixto: GraphModel = {
       name: 'ingress',
       module: 'module.red.module.seguridad',
       action: 'create',
-      values: {
-        type: 'ingress',
-        from_port: 443,
-        to_port: 443,
-        protocol: 'tcp',
-        cidr_blocks: ['0.0.0.0/0'],
-      },
+      instances: [{
+        address: 'module.red.module.seguridad.aws_security_group_rule.ingress',
+        action: 'create',
+        values: {
+          type: 'ingress',
+          from_port: 443,
+          to_port: 443,
+          protocol: 'tcp',
+          cidr_blocks: ['0.0.0.0/0'],
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
     {
       id: 'module.red.module.seguridad.aws_security_group_rule.egress',
@@ -159,12 +241,19 @@ const mixto: GraphModel = {
       name: 'egress',
       module: 'module.red.module.seguridad',
       action: 'delete',
-      values: {
-        type: 'egress',
-        from_port: 0,
-        to_port: 0,
-        protocol: '-1',
-      },
+      instances: [{
+        address: 'module.red.module.seguridad.aws_security_group_rule.egress',
+        action: 'delete',
+        values: {
+          type: 'egress',
+          from_port: 0,
+          to_port: 0,
+          protocol: '-1',
+        },
+        unknown: [],
+        sensitive: [],
+      }],
+      unresolved: [],
     },
   ],
   edges: [
@@ -174,19 +263,18 @@ const mixto: GraphModel = {
     { from: 'module.red.aws_subnet.b', to: 'aws_db_instance.primary' },
     { from: 'module.red.module.seguridad.aws_security_group.web', to: 'module.red.module.seguridad.aws_security_group_rule.ingress' },
     { from: 'module.red.module.seguridad.aws_security_group.web', to: 'module.red.module.seguridad.aws_security_group_rule.egress' },
-    { from: 'module.red.module.seguridad.aws_security_group_rule.ingress', to: 'aws_instance.web["a"]' },
-    { from: 'module.red.module.seguridad.aws_security_group_rule.ingress', to: 'aws_instance.web["b"]' },
+    { from: 'module.red.module.seguridad.aws_security_group_rule.ingress', to: 'aws_instance.web' },
     { from: 'aws_iam_role.app', to: 'aws_iam_role_policy_attachment.app' },
-    { from: 'aws_iam_role_policy_attachment.app', to: 'aws_instance.web["a"]' },
+    { from: 'aws_iam_role_policy_attachment.app', to: 'aws_instance.web' },
     { from: 'aws_s3_bucket.logs', to: 'aws_iam_role_policy_attachment.app' },
-    { from: 'aws_instance.web["a"]', to: 'aws_eip.web' },
+    { from: 'aws_instance.web', to: 'aws_eip.web' },
   ],
   modules: [
-    { id: 'module.red', parent: null },
-    { id: 'module.red.module.seguridad', parent: 'module.red' },
+    { id: 'module.red', parent: null, instances: 1 },
+    { id: 'module.red.module.seguridad', parent: 'module.red', instances: 1 },
   ],
   warnings: [
-    'Se ignoró una referencia a data.aws_ami.ubuntu: los data sources no generan aristas.',
+    'La referencia a data.aws_subnet no genera aristas: se muestra como dependencia no trazable.',
   ],
 };
 

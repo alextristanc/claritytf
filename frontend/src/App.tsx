@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import Graph from './Graph';
 import DetailsPanel from './DetailsPanel';
 import { DEFAULT_DEMO_ID, DEMOS, getDemo } from './demos';
-import { COLORS, LABELS } from './theme';
+import { COLORS, GLYPHS, LABELS } from './theme';
 import type { Action, ApiError, GraphModel } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
@@ -27,9 +27,14 @@ function Legend() {
       {(Object.keys(LABELS) as Action[]).map(a => (
         <div key={a} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 12, height: 12, background: COLORS[a], border: '1px solid #555' }} />
+          <span style={{ width: 10, textAlign: 'center' }}>{GLYPHS[a] ?? ''}</span>
           {LABELS[a]}
         </div>
       ))}
+      <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #eee',
+                    color: '#555', fontSize: 12, maxWidth: 230 }}>
+        Cada flecha es una dependencia declarada en el código, a nivel de bloque.
+      </div>
     </div>
   );
 }
@@ -82,8 +87,8 @@ export default function App() {
   const selectedNode = model?.nodes.find(n => n.id === selected) ?? null;
   const warnings = model
     ? [
-        ...(model.schemaVersion !== 1
-          ? [`Versión de modelo no esperada: ${model.schemaVersion} (se esperaba 1).`]
+        ...(model.schemaVersion !== 2
+          ? [`Versión de modelo no esperada: ${model.schemaVersion} (se esperaba 2).`]
           : []),
         ...model.warnings,
       ]
@@ -156,7 +161,9 @@ export default function App() {
             </div>
           )}
         </div>
-        {selectedNode && <DetailsPanel node={selectedNode} onClose={() => setSelected(null)} />}
+        {selectedNode && (
+          <DetailsPanel key={selectedNode.id} node={selectedNode} onClose={() => setSelected(null)} />
+        )}
       </div>
     </div>
   );

@@ -1,1 +1,195 @@
-{"schemaVersion":1,"nodes":[{"id":"aws_instance.web","type":"aws_instance","name":"web","module":null,"action":"create","values":{"ami":"ami-0abcdef1234567890","credit_specification":[],"force_destroy":false,"get_password_data":false,"hibernation":null,"instance_type":"t3.micro","launch_template":[],"region":"us-east-1","source_dest_check":true,"tags":null,"timeouts":null,"user_data":null,"user_data_replace_on_change":false,"volume_tags":null}},{"id":"module.red.aws_subnet.a","type":"aws_subnet","name":"a","module":"module.red","action":"create","values":{"assign_ipv6_address_on_creation":false,"cidr_block":"10.0.1.0/24","customer_owned_ipv4_pool":null,"enable_dns64":false,"enable_lni_at_device_index":null,"enable_resource_name_dns_a_record_on_launch":false,"enable_resource_name_dns_aaaa_record_on_launch":false,"ipv4_ipam_pool_id":null,"ipv4_netmask_length":null,"ipv6_ipam_pool_id":null,"ipv6_native":false,"ipv6_netmask_length":null,"map_customer_owned_ip_on_launch":null,"map_public_ip_on_launch":false,"outpost_arn":null,"region":"us-east-1","tags":null,"timeouts":null}},{"id":"module.red.aws_vpc.main","type":"aws_vpc","name":"main","module":"module.red","action":"create","values":{"assign_generated_ipv6_cidr_block":null,"cidr_block":"10.0.0.0/16","enable_dns_support":true,"instance_tenancy":"default","ipv4_ipam_pool_id":null,"ipv4_netmask_length":null,"ipv6_ipam_pool_id":null,"ipv6_netmask_length":null,"region":"us-east-1","tags":null}}],"edges":[{"from":"module.red.aws_subnet.a","to":"aws_instance.web"},{"from":"module.red.aws_vpc.main","to":"module.red.aws_subnet.a"}],"modules":[{"id":"module.red","parent":null}],"warnings":[]}
+{
+  "schemaVersion": 2,
+  "nodes": [
+    {
+      "id": "aws_instance.web",
+      "type": "aws_instance",
+      "name": "web",
+      "module": null,
+      "action": "create",
+      "instances": [
+        {
+          "address": "aws_instance.web",
+          "action": "create",
+          "values": {
+            "ami": "ami-0abcdef1234567890",
+            "credit_specification": [],
+            "force_destroy": false,
+            "get_password_data": false,
+            "hibernation": null,
+            "instance_type": "t3.micro",
+            "launch_template": [],
+            "region": "us-east-1",
+            "source_dest_check": true,
+            "tags": null,
+            "timeouts": null,
+            "user_data": null,
+            "user_data_replace_on_change": false,
+            "volume_tags": null
+          },
+          "unknown": [
+            "arn",
+            "associate_public_ip_address",
+            "availability_zone",
+            "capacity_reservation_specification",
+            "cpu_options",
+            "disable_api_stop",
+            "disable_api_termination",
+            "ebs_block_device",
+            "ebs_optimized",
+            "enable_primary_ipv6",
+            "enclave_options",
+            "ephemeral_block_device",
+            "host_id",
+            "host_resource_group_arn",
+            "iam_instance_profile",
+            "id",
+            "instance_initiated_shutdown_behavior",
+            "instance_lifecycle",
+            "instance_market_options",
+            "instance_state",
+            "ipv6_address_count",
+            "ipv6_addresses",
+            "key_name",
+            "maintenance_options",
+            "metadata_options",
+            "monitoring",
+            "network_interface",
+            "outpost_arn",
+            "password_data",
+            "placement_group",
+            "placement_group_id",
+            "placement_partition_number",
+            "primary_network_interface",
+            "primary_network_interface_id",
+            "private_dns",
+            "private_dns_name_options",
+            "private_ip",
+            "public_dns",
+            "public_ip",
+            "root_block_device",
+            "secondary_network_interface",
+            "secondary_private_ips",
+            "security_groups",
+            "spot_instance_request_id",
+            "subnet_id",
+            "tags_all",
+            "tenancy",
+            "user_data_base64",
+            "vpc_security_group_ids"
+          ],
+          "sensitive": []
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": "module.red.aws_subnet.a",
+      "type": "aws_subnet",
+      "name": "a",
+      "module": "module.red",
+      "action": "create",
+      "instances": [
+        {
+          "address": "module.red.aws_subnet.a",
+          "action": "create",
+          "values": {
+            "assign_ipv6_address_on_creation": false,
+            "cidr_block": "10.0.1.0/24",
+            "customer_owned_ipv4_pool": null,
+            "enable_dns64": false,
+            "enable_lni_at_device_index": null,
+            "enable_resource_name_dns_a_record_on_launch": false,
+            "enable_resource_name_dns_aaaa_record_on_launch": false,
+            "ipv4_ipam_pool_id": null,
+            "ipv4_netmask_length": null,
+            "ipv6_ipam_pool_id": null,
+            "ipv6_native": false,
+            "ipv6_netmask_length": null,
+            "map_customer_owned_ip_on_launch": null,
+            "map_public_ip_on_launch": false,
+            "outpost_arn": null,
+            "region": "us-east-1",
+            "tags": null,
+            "timeouts": null
+          },
+          "unknown": [
+            "arn",
+            "availability_zone",
+            "availability_zone_id",
+            "id",
+            "ipv6_cidr_block",
+            "ipv6_cidr_block_association_id",
+            "owner_id",
+            "private_dns_hostname_type_on_launch",
+            "tags_all",
+            "vpc_id"
+          ],
+          "sensitive": []
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": "module.red.aws_vpc.main",
+      "type": "aws_vpc",
+      "name": "main",
+      "module": "module.red",
+      "action": "create",
+      "instances": [
+        {
+          "address": "module.red.aws_vpc.main",
+          "action": "create",
+          "values": {
+            "assign_generated_ipv6_cidr_block": null,
+            "cidr_block": "10.0.0.0/16",
+            "enable_dns_support": true,
+            "instance_tenancy": "default",
+            "ipv4_ipam_pool_id": null,
+            "ipv4_netmask_length": null,
+            "ipv6_ipam_pool_id": null,
+            "ipv6_netmask_length": null,
+            "region": "us-east-1",
+            "tags": null
+          },
+          "unknown": [
+            "arn",
+            "default_network_acl_id",
+            "default_route_table_id",
+            "default_security_group_id",
+            "dhcp_options_id",
+            "enable_dns_hostnames",
+            "enable_network_address_usage_metrics",
+            "id",
+            "ipv6_association_id",
+            "ipv6_cidr_block",
+            "ipv6_cidr_block_network_border_group",
+            "main_route_table_id",
+            "owner_id",
+            "tags_all"
+          ],
+          "sensitive": []
+        }
+      ],
+      "unresolved": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "module.red.aws_subnet.a",
+      "to": "aws_instance.web"
+    },
+    {
+      "from": "module.red.aws_vpc.main",
+      "to": "module.red.aws_subnet.a"
+    }
+  ],
+  "modules": [
+    {
+      "id": "module.red",
+      "parent": null,
+      "instances": 1
+    }
+  ],
+  "warnings": []
+}
