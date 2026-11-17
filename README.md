@@ -17,6 +17,41 @@ Instead of manually inspecting large JSON files, developers can visualize infras
 
 The application uses a Java backend to parse Terraform plans and generate a simplified graph model, while a React frontend renders the infrastructure as an interactive diagram.
 
+## Screenshots
+
+### 1. Main Dashboard
+
+<p align="center">
+  <img
+    src="docs/images/dashboard.png"
+    alt="ClarityTF main dashboard"
+    width="100%"
+    style="max-width: 1000px; height: auto;"
+  />
+</p>
+
+### 2. Infrastructure Dependency Graph
+
+<p align="center">
+  <img
+    src="docs/images/dependency-graph.png"
+    alt="Interactive Terraform infrastructure dependency graph"
+    width="100%"
+    style="max-width: 1000px; height: auto;"
+  />
+</p>
+
+### 3. Resource Details
+
+<p align="center">
+  <img
+    src="docs/images/resource-details.png"
+    alt="Selected infrastructure resource details"
+    width="100%"
+    style="max-width: 1000px; height: auto;"
+  />
+</p>
+
 **Key highlights:**
 - Interactive infrastructure visualization.
 - Resource grouping and nested module support.
