@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import Graph from './Graph';
 import DetailsPanel from './DetailsPanel';
-import demoModel from './demoModel.json';
+import { DEFAULT_DEMO_ID, DEMOS, getDemo } from './demos';
 import { COLORS, LABELS } from './theme';
 import type { Action, ApiError, GraphModel } from './types';
 
@@ -42,6 +42,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [warningsDismissed, setWarningsDismissed] = useState(false);
+  const [demoId, setDemoId] = useState(DEFAULT_DEMO_ID);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function show(m: GraphModel, src: 'demo' | 'backend') {
@@ -52,9 +53,10 @@ export default function App() {
     setVersion(v => v + 1);
   }
 
-  function loadDemo() {
+  function loadDemo(id: string = DEFAULT_DEMO_ID) {
     setErrorCode(null);
-    show(demoModel as unknown as GraphModel, 'demo');
+    setDemoId(id);
+    show(getDemo(id).model, 'demo');
   }
 
   async function load(file: File) {
@@ -101,7 +103,12 @@ export default function App() {
         <button onClick={() => inputRef.current?.click()} disabled={loading}>
           {model ? 'Cargar otro archivo' : 'Cargar plan.json'}
         </button>
-        <button onClick={loadDemo} disabled={loading}>Probar con ejemplo</button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          Ejemplo:
+          <select value={demoId} onChange={e => loadDemo(e.target.value)} disabled={loading}>
+            {DEMOS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+        </label>
         {loading && <span style={{ color: '#666' }}>Procesando…</span>}
         {model && !loading && (
           <span style={{ marginLeft: 'auto', color: '#666', fontSize: 13 }}>
@@ -114,7 +121,7 @@ export default function App() {
         <div role="alert" style={{ background: '#fef2f2', color: '#991b1b', borderBottom: '1px solid #fecaca',
                                    padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span>{MESSAGES[errorCode]}</span>
-          {SUGGEST_DEMO.has(errorCode) && <button onClick={loadDemo}>Usar modo demo</button>}
+          {SUGGEST_DEMO.has(errorCode) && <button onClick={() => loadDemo()}>Usar modo demo</button>}
           <button onClick={() => setErrorCode(null)} style={{ marginLeft: 'auto' }}>✕</button>
         </div>
       )}
