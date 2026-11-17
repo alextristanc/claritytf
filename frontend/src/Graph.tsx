@@ -2,18 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { ReactFlow, Background, Controls, MarkerType, Position } from '@xyflow/react';
 import type { Node, Edge, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { Action, GraphModel } from './types';
+import type { GraphModel } from './types';
 import { layout, NODE_W, NODE_H } from './layout';
 import type { Box } from './layout';
 import { dependents } from './useImpact';
-
-export const COLORS: Record<Action, string> = {
-  create: '#86efac',
-  update: '#fde68a',
-  delete: '#fca5a5',
-  replace: '#fdba74',
-  'no-op': '#bfdbfe',
-};
+import { COLORS } from './theme';
 
 function ModuleGroup({ data }: NodeProps) {
   return (

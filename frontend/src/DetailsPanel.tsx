@@ -1,10 +1,5 @@
-import type { Action, GraphNode } from './types';
-import { COLORS } from './Graph';
-
-const LABELS: Record<Action, string> = {
-  create: 'Crear', update: 'Actualizar', delete: 'Eliminar',
-  replace: 'Reemplazar', 'no-op': 'Sin cambios',
-};
+import type { GraphNode } from './types';
+import { COLORS, LABELS } from './theme';
 
 function fmt(v: unknown): string {
   const s = typeof v === 'string' ? v : JSON.stringify(v);

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import Graph, { COLORS } from './Graph';
+import Graph from './Graph';
 import DetailsPanel from './DetailsPanel';
 import demoModel from './demoModel.json';
+import { COLORS, LABELS } from './theme';
 import type { Action, ApiError, GraphModel } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
@@ -18,11 +19,6 @@ const MESSAGES: Record<string, string> = {
   INTERNAL_ERROR: 'Ocurrió un error al procesar el archivo.',
 };
 const SUGGEST_DEMO = new Set(['NOT_A_PLAN', 'BACKEND_UNREACHABLE']);
-
-const LABELS: Record<Action, string> = {
-  create: 'Crear', update: 'Actualizar', delete: 'Eliminar',
-  replace: 'Reemplazar', 'no-op': 'Sin cambios',
-};
 
 function Legend() {
   return (
