@@ -2,7 +2,8 @@ import type { GraphNode } from './types';
 import { COLORS, LABELS } from './theme';
 
 function fmt(v: unknown): string {
-  const s = typeof v === 'string' ? v : JSON.stringify(v);
+  if (v === undefined) return '—';
+  const s = typeof v === 'string' ? v : JSON.stringify(v) ?? '—';
   return s.length > 200 ? s.slice(0, 200) + '…' : s;
 }
 
