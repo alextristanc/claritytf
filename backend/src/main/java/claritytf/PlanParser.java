@@ -25,7 +25,10 @@ public class PlanParser {
         if (root.path("resource_changes").isEmpty())
             throw new PlanException(Code.EMPTY_PLAN, "Sin recursos");
 
-        // Siguiente paso: GraphExtractor llenará nodos, aristas y módulos
-        return extractor.extract(root);
+        Model.GraphModel model = extractor.extract(root);
+        // Un plan con solo data sources (o sin cambios representables) deja el grafo vacío
+        if (model.nodes().isEmpty())
+            throw new PlanException(Code.EMPTY_PLAN, "Sin recursos representables");
+        return model;
     }
 }

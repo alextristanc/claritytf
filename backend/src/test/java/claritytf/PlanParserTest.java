@@ -2,6 +2,7 @@ package claritytf;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -63,17 +64,28 @@ class PlanParserTest {
         assertEquals(PlanException.Code.EMPTY_PLAN, e.code);
     }
 
+    @Test void planSoloConDataSourcesSeRechaza() {
+        String rc = "[{\"address\":\"data.aws_ami.ubuntu\",\"mode\":\"data\",\"type\":\"aws_ami\",\"name\":\"ubuntu\","
+            + "\"change\":{\"actions\":[\"read\"],\"after\":{}}}]";
+        var e = assertThrows(PlanException.class, () -> parser.parse(String.format(BASE, rc).getBytes()));
+        assertEquals(PlanException.Code.EMPTY_PLAN, e.code);
+    }
+
     @Test void replaceSeDetecta() {
         String rc = "[{\"address\":\"a.x\",\"type\":\"a\",\"name\":\"x\",\"change\":{\"actions\":[\"delete\",\"create\"],\"after\":{}}}]";
         var m = parser.parse(String.format(BASE, rc).getBytes());
         assertEquals("replace", m.nodes().get(0).action());
     }
 
-    @Test void accionDesconocidaGeneraAdvertencia() {
+    @Test void accionDesconocidaGeneraAdvertencia() throws Exception {
         String rc = "[{\"address\":\"a.x\",\"type\":\"a\",\"name\":\"x\",\"change\":{\"actions\":[\"read\"]}}]";
-        var m = parser.parse(String.format(BASE, rc).getBytes());
+        String json = String.format(BASE, rc);
+        var m = new GraphExtractor().extract(new ObjectMapper().readTree(json));
         assertTrue(m.nodes().isEmpty());
         assertEquals(1, m.warnings().size());
+        // Sin nodos representables, el parser rechaza el plan
+        var e = assertThrows(PlanException.class, () -> parser.parse(json.getBytes()));
+        assertEquals(PlanException.Code.EMPTY_PLAN, e.code);
     }
 
     @Test void tipoDesconocidoSeDibuja() {
