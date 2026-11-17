@@ -93,21 +93,62 @@ public class GraphExtractor {
             List<String> targets = byBase.getOrDefault(prefix + res.path("address").asText(), List.of());
             if (targets.isEmpty()) continue;
 
+            // Solo las expresiones: una referencia suelta "module.x" no se expande aquí,
+            // únicamente las salidas concretas ("module.x.output") generan aristas.
             Set<String> refs = new LinkedHashSet<>();
             collectRefs(res.path("expressions"), refs);
-            res.path("depends_on").forEach(d -> refs.add(d.asText()));
+            Set<String> deps = new LinkedHashSet<>();
+            for (String ref : refs) deps.addAll(resolve(ref, prefix, vars, outputs));
 
-            for (String ref : refs)
-                for (String dep : resolve(ref, prefix, vars, outputs))
-                    for (String from : byBase.getOrDefault(dep, List.of()))
-                        for (String to : targets)
-                            if (!from.equals(to)) edges.add(new Model.Edge(from, to));
+            // depends_on: una entrada "module.x" sí expande a todos los recursos del módulo.
+            for (JsonNode d : res.path("depends_on"))
+                deps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBase));
+
+            addEdges(deps, targets, byBase, edges);
         }
         module.path("module_calls").fields().forEachRemaining(e -> {
             String childPrefix = prefix + "module." + e.getKey() + ".";
-            walk(e.getValue().path("module"), childPrefix,
-                inputs(e.getValue(), prefix, vars, outputs), byBase, outputs, edges);
+            Map<String, Set<String>> childVars = inputs(e.getValue(), prefix, vars, outputs);
+
+            // depends_on del module_call: todos los recursos del módulo dependen de lo listado.
+            Set<String> callDeps = new LinkedHashSet<>();
+            for (JsonNode d : e.getValue().path("depends_on"))
+                callDeps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBase));
+            if (!callDeps.isEmpty()) addEdges(callDeps, nodesIn(byBase, childPrefix), byBase, edges);
+
+            walk(e.getValue().path("module"), childPrefix, childVars, byBase, outputs, edges);
         });
+    }
+
+    private void addEdges(Set<String> deps, List<String> targets, Map<String, List<String>> byBase,
+                          Set<Model.Edge> edges) {
+        for (String dep : deps)
+            for (String from : byBase.getOrDefault(dep, List.of()))
+                for (String to : targets)
+                    if (!from.equals(to)) edges.add(new Model.Edge(from, to));
+    }
+
+    // Ids de nodo cuyo módulo empieza por el prefijo (incluye módulos anidados).
+    private List<String> nodesIn(Map<String, List<String>> byBase, String prefix) {
+        List<String> out = new ArrayList<>();
+        for (var e : byBase.entrySet())
+            if (e.getKey().startsWith(prefix)) out.addAll(e.getValue());
+        return out;
+    }
+
+    // depends_on: "module.x" expande a todos los recursos de ese módulo (anidados incluidos).
+    private Set<String> resolveDependsOn(String ref, String prefix, Map<String, Set<String>> vars,
+                                         Map<String, Set<String>> outputs,
+                                         Map<String, List<String>> byBase) {
+        String[] p = base(ref).split("\\.");
+        if (p.length == 2 && "module".equals(p[0])) {
+            Set<String> out = new LinkedHashSet<>();
+            String modulePrefix = prefix + "module." + p[1] + ".";
+            for (String key : byBase.keySet())
+                if (key.startsWith(modulePrefix)) out.add(key);
+            return out;
+        }
+        return resolve(ref, prefix, vars, outputs);
     }
 
     // Entradas de un módulo: variable → recursos (del ámbito padre) de los que depende
