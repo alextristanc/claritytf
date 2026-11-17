@@ -1,6 +1,7 @@
 package claritytf;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.*;
 
 public class GraphExtractor {
@@ -9,30 +10,49 @@ public class GraphExtractor {
         List<String> warnings = new ArrayList<>();
         List<Model.Node> nodes = extractNodes(root, warnings);
         List<Model.Edge> edges = extractEdges(root, nodes);
-        return new Model.GraphModel(1, nodes, edges, extractModules(nodes), warnings);
+        return new Model.GraphModel(2, nodes, edges, extractModules(root), warnings);
     }
 
     private List<Model.Node> extractNodes(JsonNode root, List<String> warnings) {
-        List<Model.Node> nodes = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
+        Map<String, List<Model.Instance>> byBlock = new LinkedHashMap<>();
+        Map<String, String> types = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        Map<String, String> modules = new HashMap<>();
+        Set<String> seenAddresses = new HashSet<>();
+
         for (JsonNode rc : root.path("resource_changes")) {
             if ("data".equals(rc.path("mode").asText())) continue;
             String address = rc.path("address").asText("");
             if (address.isEmpty()) { warnings.add("Recurso sin address omitido"); continue; }
-            if (!seen.add(address)) { warnings.add("Dirección duplicada omitida: " + address); continue; }
+            if (!seenAddresses.add(address)) { warnings.add("Dirección duplicada omitida: " + address); continue; }
 
             JsonNode change = rc.path("change");
             String action = toAction(change.path("actions"));
             if (action == null) { warnings.add("Acción no soportada en " + address); continue; }
 
-            JsonNode values = "delete".equals(action) ? change.path("before") : change.path("after");
-            nodes.add(new Model.Node(
-                address,
-                rc.path("type").asText(""),
-                rc.path("name").asText(""),
-                rc.path("module_address").asText(null),
-                action,
-                values.isMissingNode() ? null : values));
+            boolean delete = "delete".equals(action);
+            JsonNode rawValues = delete ? change.path("before") : change.path("after");
+            List<String> sensitive = flagged(
+                delete ? change.path("before_sensitive") : change.path("after_sensitive"));
+            List<String> unknown = flagged(change.path("after_unknown"));
+
+            String id = stripKeys(address);
+            byBlock.computeIfAbsent(id, k -> new ArrayList<>())
+                .add(new Model.Instance(address, action, withoutSensitive(rawValues, sensitive),
+                    unknown, sensitive));
+            types.put(id, rc.path("type").asText(""));
+            names.put(id, rc.path("name").asText(""));
+            String moduleAddress = rc.path("module_address").asText("");
+            modules.put(id, moduleAddress.isEmpty() ? null : stripKeys(moduleAddress));
+        }
+
+        Map<String, List<String>> unresolved = unresolvedByBlock(root);
+        List<Model.Node> nodes = new ArrayList<>();
+        for (var e : byBlock.entrySet()) {
+            String id = e.getKey();
+            nodes.add(new Model.Node(id, types.get(id), names.get(id), modules.get(id),
+                aggregateAction(e.getValue()), e.getValue(),
+                unresolved.getOrDefault(id, List.of())));
         }
         return nodes;
     }
@@ -48,28 +68,115 @@ public class GraphExtractor {
         };
     }
 
-    // Módulos y sus padres, derivados de module_address (module.a.module.b → padre module.a)
-    private List<Model.ModuleRef> extractModules(List<Model.Node> nodes) {
-        Set<String> ids = new LinkedHashSet<>();
-        for (var n : nodes) {
-            String m = n.module();
-            while (m != null) {
-                ids.add(m);
-                int i = m.lastIndexOf(".module.");
-                m = i < 0 ? null : m.substring(0, i);
+    // Si todas las instancias coinciden se devuelve esa acción; si no, "mixed".
+    private String aggregateAction(List<Model.Instance> instances) {
+        String first = instances.get(0).action();
+        for (var i : instances)
+            if (!i.action().equals(first)) return "mixed";
+        return first;
+    }
+
+    // Claves de primer nivel marcadas con true o con un objeto/array que contenga true.
+    private List<String> flagged(JsonNode node) {
+        List<String> out = new ArrayList<>();
+        if (node == null || !node.isObject()) return out;
+        node.fields().forEachRemaining(e -> {
+            if (containsTrue(e.getValue())) out.add(e.getKey());
+        });
+        return out;
+    }
+
+    private boolean containsTrue(JsonNode n) {
+        if (n.isBoolean()) return n.booleanValue();
+        if (n.isArray() || n.isObject())
+            for (JsonNode child : n)
+                if (containsTrue(child)) return true;
+        return false;
+    }
+
+    // values = after (o before en delete) sin los atributos sensibles.
+    private JsonNode withoutSensitive(JsonNode raw, List<String> sensitive) {
+        if (raw == null || raw.isMissingNode() || raw.isNull()) return null;
+        if (sensitive.isEmpty() || !raw.isObject()) return raw;
+        ObjectNode copy = raw.deepCopy();
+        for (String key : sensitive) copy.remove(key);
+        return copy;
+    }
+
+    // local.* / data.* citadas en las expresiones del propio recurso, normalizadas a dos segmentos.
+    private Map<String, List<String>> unresolvedByBlock(JsonNode root) {
+        Map<String, List<String>> out = new HashMap<>();
+        collectUnresolved(root.path("configuration").path("root_module"), "", out);
+        return out;
+    }
+
+    private void collectUnresolved(JsonNode module, String prefix, Map<String, List<String>> out) {
+        for (JsonNode res : module.path("resources")) {
+            String id = prefix + res.path("address").asText();
+            Set<String> refs = new LinkedHashSet<>();
+            collectRefs(res.path("expressions"), refs);
+            List<String> list = new ArrayList<>();
+            for (String ref : refs) {
+                String[] p = stripKeys(ref).split("\\.");
+                if (p.length >= 2 && ("local".equals(p[0]) || "data".equals(p[0]))) {
+                    String normalized = p[0] + "." + p[1];
+                    if (!list.contains(normalized)) list.add(normalized);
+                }
+            }
+            if (!list.isEmpty()) out.put(id, list);
+        }
+        module.path("module_calls").fields().forEachRemaining(e ->
+            collectUnresolved(e.getValue().path("module"), prefix + "module." + e.getKey() + ".", out));
+    }
+
+    // Módulos y sus padres, con el número de instancias (module_address con claves) de cada llamada.
+    private List<Model.ModuleRef> extractModules(JsonNode root) {
+        Map<String, Set<String>> addresses = new LinkedHashMap<>();
+        for (JsonNode rc : root.path("resource_changes")) {
+            if ("data".equals(rc.path("mode").asText())) continue;
+            String address = rc.path("module_address").asText("");
+            while (!address.isEmpty()) {
+                addresses.computeIfAbsent(stripKeys(address), k -> new LinkedHashSet<>()).add(address);
+                address = parentModuleAddress(address);
             }
         }
         List<Model.ModuleRef> out = new ArrayList<>();
-        for (String id : ids) {
+        for (var e : addresses.entrySet()) {
+            String id = e.getKey();
             int i = id.lastIndexOf(".module.");
-            out.add(new Model.ModuleRef(id, i < 0 ? null : id.substring(0, i)));
+            out.add(new Model.ModuleRef(id, i < 0 ? null : id.substring(0, i), e.getValue().size()));
         }
         return out;
     }
 
+    private String parentModuleAddress(String address) {
+        int cut = lastModuleSeparator(address);
+        return cut < 0 ? "" : address.substring(0, cut);
+    }
+
+    // Último ".module." fuera de corchetes (las claves de for_each pueden contener puntos).
+    private int lastModuleSeparator(String address) {
+        int depth = 0;
+        char quote = 0;
+        int last = -1;
+        for (int i = 0; i < address.length(); i++) {
+            char c = address.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') i++;
+                else if (c == quote) quote = 0;
+                continue;
+            }
+            if (c == '"') { quote = c; continue; }
+            if (c == '[') { depth++; continue; }
+            if (c == ']') { depth = Math.max(0, depth - 1); continue; }
+            if (depth == 0 && address.startsWith(".module.", i)) last = i;
+        }
+        return last;
+    }
+
     private List<Model.Edge> extractEdges(JsonNode root, List<Model.Node> nodes) {
-        Map<String, List<String>> byBase = new HashMap<>();
-        for (var n : nodes) byBase.computeIfAbsent(base(n.id()), k -> new ArrayList<>()).add(n.id());
+        Map<String, List<String>> byBlock = new HashMap<>();
+        for (var n : nodes) byBlock.computeIfAbsent(n.id(), k -> new ArrayList<>()).add(n.id());
 
         JsonNode rootModule = root.path("configuration").path("root_module");
         Map<String, Set<String>> outputs = new HashMap<>();
@@ -82,15 +189,15 @@ public class GraphExtractor {
         }
 
         Set<Model.Edge> edges = new LinkedHashSet<>();
-        walk(rootModule, "", Map.of(), byBase, outputs, edges);
+        walk(rootModule, "", Map.of(), byBlock, outputs, edges);
         return new ArrayList<>(edges);
     }
 
     private void walk(JsonNode module, String prefix, Map<String, Set<String>> vars,
-                    Map<String, List<String>> byBase, Map<String, Set<String>> outputs,
+                    Map<String, List<String>> byBlock, Map<String, Set<String>> outputs,
                     Set<Model.Edge> edges) {
         for (JsonNode res : module.path("resources")) {
-            List<String> targets = byBase.getOrDefault(prefix + res.path("address").asText(), List.of());
+            List<String> targets = byBlock.getOrDefault(prefix + res.path("address").asText(), List.of());
             if (targets.isEmpty()) continue;
 
             // Solo las expresiones: una referencia suelta "module.x" no se expande aquí,
@@ -102,9 +209,9 @@ public class GraphExtractor {
 
             // depends_on: una entrada "module.x" sí expande a todos los recursos del módulo.
             for (JsonNode d : res.path("depends_on"))
-                deps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBase));
+                deps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBlock));
 
-            addEdges(deps, targets, byBase, edges);
+            addEdges(deps, targets, byBlock, edges);
         }
         module.path("module_calls").fields().forEachRemaining(e -> {
             String childPrefix = prefix + "module." + e.getKey() + ".";
@@ -113,25 +220,25 @@ public class GraphExtractor {
             // depends_on del module_call: todos los recursos del módulo dependen de lo listado.
             Set<String> callDeps = new LinkedHashSet<>();
             for (JsonNode d : e.getValue().path("depends_on"))
-                callDeps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBase));
-            if (!callDeps.isEmpty()) addEdges(callDeps, nodesIn(byBase, childPrefix), byBase, edges);
+                callDeps.addAll(resolveDependsOn(d.asText(), prefix, vars, outputs, byBlock));
+            if (!callDeps.isEmpty()) addEdges(callDeps, nodesIn(byBlock, childPrefix), byBlock, edges);
 
-            walk(e.getValue().path("module"), childPrefix, childVars, byBase, outputs, edges);
+            walk(e.getValue().path("module"), childPrefix, childVars, byBlock, outputs, edges);
         });
     }
 
-    private void addEdges(Set<String> deps, List<String> targets, Map<String, List<String>> byBase,
+    private void addEdges(Set<String> deps, List<String> targets, Map<String, List<String>> byBlock,
                           Set<Model.Edge> edges) {
         for (String dep : deps)
-            for (String from : byBase.getOrDefault(dep, List.of()))
+            for (String from : byBlock.getOrDefault(dep, List.of()))
                 for (String to : targets)
                     if (!from.equals(to)) edges.add(new Model.Edge(from, to));
     }
 
     // Ids de nodo cuyo módulo empieza por el prefijo (incluye módulos anidados).
-    private List<String> nodesIn(Map<String, List<String>> byBase, String prefix) {
+    private List<String> nodesIn(Map<String, List<String>> byBlock, String prefix) {
         List<String> out = new ArrayList<>();
-        for (var e : byBase.entrySet())
+        for (var e : byBlock.entrySet())
             if (e.getKey().startsWith(prefix)) out.addAll(e.getValue());
         return out;
     }
@@ -139,12 +246,12 @@ public class GraphExtractor {
     // depends_on: "module.x" expande a todos los recursos de ese módulo (anidados incluidos).
     private Set<String> resolveDependsOn(String ref, String prefix, Map<String, Set<String>> vars,
                                          Map<String, Set<String>> outputs,
-                                         Map<String, List<String>> byBase) {
-        String[] p = base(ref).split("\\.");
+                                         Map<String, List<String>> byBlock) {
+        String[] p = stripKeys(ref).split("\\.");
         if (p.length == 2 && "module".equals(p[0])) {
             Set<String> out = new LinkedHashSet<>();
             String modulePrefix = prefix + "module." + p[1] + ".";
-            for (String key : byBase.keySet())
+            for (String key : byBlock.keySet())
                 if (key.startsWith(modulePrefix)) out.add(key);
             return out;
         }
@@ -186,7 +293,7 @@ public class GraphExtractor {
     // "aws_vpc.main[0].id" → ["<prefijo>aws_vpc.main"]; "var.x" → lo que alimenta esa variable
     private Set<String> resolve(String ref, String prefix, Map<String, Set<String>> vars,
                                 Map<String, Set<String>> outputs) {
-        String[] p = base(ref).split("\\.");   // sin índices: también cubre claves de for_each con puntos
+        String[] p = stripKeys(ref).split("\\.");
         if (p.length < 2) return Set.of();
         switch (p[0]) {
             case "var": return vars.getOrDefault(p[1], Set.of());
@@ -204,5 +311,30 @@ public class GraphExtractor {
         n.forEach(c -> collectRefs(c, out));
     }
 
-    private String base(String id) { return id.replaceAll("\\[[^\\]]*\\]", ""); }
+    // Elimina claves de índice respetando comillas y puntos dentro de ellas:
+    // aws_instance.web["a.b"] → aws_instance.web
+    static String stripKeys(String id) {
+        StringBuilder out = new StringBuilder(id.length());
+        int depth = 0;
+        char quote = 0;
+        for (int i = 0; i < id.length(); i++) {
+            char c = id.charAt(i);
+            if (depth > 0) {
+                if (quote != 0) {
+                    if (c == '\\') i++;
+                    else if (c == quote) quote = 0;
+                } else if (c == '"' || c == '\'') {
+                    quote = c;
+                } else if (c == '[') {
+                    depth++;
+                } else if (c == ']') {
+                    depth--;
+                }
+                continue;
+            }
+            if (c == '[') { depth = 1; continue; }
+            out.append(c);
+        }
+        return out.toString();
+    }
 }

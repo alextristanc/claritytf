@@ -35,7 +35,7 @@ class PlanParserTest {
                 String name = p.getFileName().toString();
                 var m = parser.parse(Files.readAllBytes(p));
                 assertInvariants(m, name);
-                assertEquals(1, m.schemaVersion(), "schemaVersion inesperado en " + name);
+                assertEquals(2, m.schemaVersion(), "schemaVersion inesperado en " + name);
             }
         }
     }
@@ -78,12 +78,12 @@ class PlanParserTest {
 
     @Test void variablesDeModuloYAnidados() throws Exception {
         var m = parser.parse(fixture("plan-modulos.json"));
-        assertEquals(6, m.nodes().size());
+        assertEquals(4, m.nodes().size());
         assertEquals(2, m.modules().size());
-        assertEquals(7, m.edges().size());
-        assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.red.aws_subnet.a[0]")));
+        assertEquals(3, m.edges().size());
+        assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.red.aws_subnet.a")));
         assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.red.module.seguridad.aws_security_group.web")));
-        assertTrue(m.edges().contains(new Model.Edge("module.red.aws_subnet.a[1]", "aws_instance.web[\"a\"]")));
+        assertTrue(m.edges().contains(new Model.Edge("module.red.aws_subnet.a", "aws_instance.web")));
         assertInvariants(m);
     }
 
@@ -146,10 +146,9 @@ class PlanParserTest {
 
     @Test void moduloConCountYForEach() throws Exception {
         var m = parser.parse(fixture("plan-dependencias.json"));
-        assertTrue(m.nodes().stream().anyMatch(n -> n.id().equals("module.subredes[0].aws_subnet.b")));
-        assertTrue(m.nodes().stream().anyMatch(n -> n.id().equals("module.subredes[1].aws_subnet.b")));
-        assertTrue(m.nodes().stream().anyMatch(n -> n.id().equals("module.seguridad[\"web\"].aws_security_group.web")));
-        assertTrue(m.modules().stream().anyMatch(x -> x.id().equals("module.seguridad[\"db\"]")));
+        assertTrue(m.nodes().stream().anyMatch(n -> n.id().equals("module.subredes.aws_subnet.b")));
+        assertTrue(m.nodes().stream().anyMatch(n -> n.id().equals("module.seguridad.aws_security_group.web")));
+        assertTrue(m.modules().stream().anyMatch(x -> x.id().equals("module.seguridad") && x.instances() == 2));
         assertInvariants(m);
     }
 
@@ -175,8 +174,7 @@ class PlanParserTest {
         // (b) depends_on del module_call: la VPC precede a todos los recursos de base.
         assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.base.aws_route_table.rt")));
         // (a) depends_on = [module.base] en un recurso: aristas desde todos los recursos del módulo.
-        assertTrue(m.edges().contains(new Model.Edge("module.base.aws_subnet.a[0]", "aws_instance.app")));
-        assertTrue(m.edges().contains(new Model.Edge("module.base.aws_subnet.a[1]", "aws_instance.app")));
+        assertTrue(m.edges().contains(new Model.Edge("module.base.aws_subnet.a", "aws_instance.app")));
         assertTrue(m.edges().contains(new Model.Edge("module.base.aws_route_table.rt", "aws_instance.app")));
         // (c) una referencia "module.seguridad" suelta no expande el módulo.
         assertTrue(m.edges().stream().noneMatch(e -> e.to().startsWith("aws_cloudwatch_log_group")),

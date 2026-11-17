@@ -96,7 +96,7 @@ class AppTest {
         var res = post(planFixture("plan.json"));
         assertEquals(200, res.statusCode());
         JsonNode json = mapper.readTree(res.body());
-        assertEquals(1, json.path("schemaVersion").asInt());
+        assertEquals(2, json.path("schemaVersion").asInt());
         assertEquals(3, json.path("nodes").size());
         assertEquals(2, json.path("edges").size());
     }
