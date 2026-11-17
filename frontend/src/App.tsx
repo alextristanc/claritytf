@@ -41,12 +41,14 @@ export default function App() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [warningsDismissed, setWarningsDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function show(m: GraphModel, src: 'demo' | 'backend') {
     setModel(m);
     setSource(src);
     setSelected(null);
+    setWarningsDismissed(false);
     setVersion(v => v + 1);
   }
 
@@ -76,6 +78,14 @@ export default function App() {
   }
 
   const selectedNode = model?.nodes.find(n => n.id === selected) ?? null;
+  const warnings = model
+    ? [
+        ...(model.schemaVersion !== 1
+          ? [`Versión de modelo no esperada: ${model.schemaVersion} (se esperaba 1).`]
+          : []),
+        ...model.warnings,
+      ]
+    : [];
 
   return (
     <div
@@ -106,6 +116,22 @@ export default function App() {
           <span>{MESSAGES[errorCode]}</span>
           {SUGGEST_DEMO.has(errorCode) && <button onClick={loadDemo}>Usar modo demo</button>}
           <button onClick={() => setErrorCode(null)} style={{ marginLeft: 'auto' }}>✕</button>
+        </div>
+      )}
+
+      {model && !warningsDismissed && warnings.length > 0 && (
+        <div role="status" style={{ background: '#fffbeb', color: '#92400e', borderBottom: '1px solid #fde68a',
+                                    padding: '8px 12px', display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 13 }}>
+          <span style={{ whiteSpace: 'nowrap' }}>
+            ⚠ {warnings.length} advertencia{warnings.length === 1 ? '' : 's'}
+          </span>
+          <details style={{ flex: 1 }}>
+            <summary style={{ cursor: 'pointer' }}>Ver detalle</summary>
+            <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </details>
+          <button onClick={() => setWarningsDismissed(true)} aria-label="Cerrar advertencias">✕</button>
         </div>
       )}
 
