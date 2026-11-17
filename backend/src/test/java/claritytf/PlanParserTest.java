@@ -45,4 +45,42 @@ class PlanParserTest {
     assertTrue(m.edges().contains(new Model.Edge("module.red.aws_subnet.a", "aws_instance.web")));
     }
 
+    private static final String BASE =
+        "{\"resource_changes\":%s,\"configuration\":{\"root_module\":{}}}";
+
+    @Test void variablesDeModuloYAnidados() throws Exception {
+        var m = parser.parse(fixture("plan-modulos.json"));
+        assertEquals(6, m.nodes().size());
+        assertEquals(2, m.modules().size());
+        assertEquals(7, m.edges().size());
+        assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.red.aws_subnet.a[0]")));
+        assertTrue(m.edges().contains(new Model.Edge("aws_vpc.main", "module.red.module.seguridad.aws_security_group.web")));
+        assertTrue(m.edges().contains(new Model.Edge("module.red.aws_subnet.a[1]", "aws_instance.web[\"a\"]")));
+    }
+
+    @Test void planVacio() {
+        var e = assertThrows(PlanException.class, () -> parser.parse(String.format(BASE, "[]").getBytes()));
+        assertEquals(PlanException.Code.EMPTY_PLAN, e.code);
+    }
+
+    @Test void replaceSeDetecta() {
+        String rc = "[{\"address\":\"a.x\",\"type\":\"a\",\"name\":\"x\",\"change\":{\"actions\":[\"delete\",\"create\"],\"after\":{}}}]";
+        var m = parser.parse(String.format(BASE, rc).getBytes());
+        assertEquals("replace", m.nodes().get(0).action());
+    }
+
+    @Test void accionDesconocidaGeneraAdvertencia() {
+        String rc = "[{\"address\":\"a.x\",\"type\":\"a\",\"name\":\"x\",\"change\":{\"actions\":[\"read\"]}}]";
+        var m = parser.parse(String.format(BASE, rc).getBytes());
+        assertTrue(m.nodes().isEmpty());
+        assertEquals(1, m.warnings().size());
+    }
+
+    @Test void tipoDesconocidoSeDibuja() {
+        String rc = "[{\"address\":\"zzz.x\",\"type\":\"zzz_raro\",\"name\":\"x\",\"change\":{\"actions\":[\"create\"],\"after\":{}}}]";
+        var m = parser.parse(String.format(BASE, rc).getBytes());
+        assertEquals(1, m.nodes().size());
+        assertEquals("zzz_raro", m.nodes().get(0).type());
+    }        
+
 }

@@ -67,21 +67,23 @@ public class GraphExtractor {
         return out;
     }
 
-        private List<Model.Edge> extractEdges(JsonNode root, List<Model.Node> nodes) {
+    private List<Model.Edge> extractEdges(JsonNode root, List<Model.Node> nodes) {
         Map<String, List<String>> byBase = new HashMap<>();
         for (var n : nodes) byBase.computeIfAbsent(base(n.id()), k -> new ArrayList<>()).add(n.id());
 
         JsonNode rootModule = root.path("configuration").path("root_module");
         Map<String, Set<String>> outputs = new HashMap<>();
-        collectOutputs(rootModule, "", outputs);
+        // varias pasadas: un módulo puede usar outputs de otro que se procesa después
+        for (int i = 0; i < 3; i++) collectOutputs(rootModule, "", Map.of(), outputs);
 
         Set<Model.Edge> edges = new LinkedHashSet<>();
-        walk(rootModule, "", byBase, outputs, edges);
+        walk(rootModule, "", Map.of(), byBase, outputs, edges);
         return new ArrayList<>(edges);
     }
 
-    private void walk(JsonNode module, String prefix, Map<String, List<String>> byBase,
-                    Map<String, Set<String>> outputs, Set<Model.Edge> edges) {
+    private void walk(JsonNode module, String prefix, Map<String, Set<String>> vars,
+                    Map<String, List<String>> byBase, Map<String, Set<String>> outputs,
+                    Set<Model.Edge> edges) {
         for (JsonNode res : module.path("resources")) {
             List<String> targets = byBase.getOrDefault(prefix + res.path("address").asText(), List.of());
             if (targets.isEmpty()) continue;
@@ -91,37 +93,58 @@ public class GraphExtractor {
             res.path("depends_on").forEach(d -> refs.add(d.asText()));
 
             for (String ref : refs)
-                for (String dep : resolve(ref, prefix, outputs))
+                for (String dep : resolve(ref, prefix, vars, outputs))
                     for (String from : byBase.getOrDefault(dep, List.of()))
                         for (String to : targets)
                             if (!from.equals(to)) edges.add(new Model.Edge(from, to));
         }
-        module.path("module_calls").fields().forEachRemaining(e ->
-            walk(e.getValue().path("module"), prefix + "module." + e.getKey() + ".", byBase, outputs, edges));
+        module.path("module_calls").fields().forEachRemaining(e -> {
+            String childPrefix = prefix + "module." + e.getKey() + ".";
+            walk(e.getValue().path("module"), childPrefix,
+                inputs(e.getValue(), prefix, vars, outputs), byBase, outputs, edges);
+        });
     }
 
-    // outputs de cada módulo → recursos a los que apuntan (hijos primero)
-    private void collectOutputs(JsonNode module, String prefix, Map<String, Set<String>> outputs) {
+    // Entradas de un módulo: variable → recursos (del ámbito padre) de los que depende
+    private Map<String, Set<String>> inputs(JsonNode call, String parentPrefix,
+            Map<String, Set<String>> parentVars, Map<String, Set<String>> outputs) {
+        Map<String, Set<String>> in = new HashMap<>();
+        call.path("expressions").fields().forEachRemaining(f -> {
+            Set<String> refs = new LinkedHashSet<>();
+            collectRefs(f.getValue(), refs);
+            Set<String> deps = new LinkedHashSet<>();
+            for (String r : refs) deps.addAll(resolve(r, parentPrefix, parentVars, outputs));
+            in.put(f.getKey(), deps);
+        });
+        return in;
+    }
+
+    // Outputs de cada módulo → recursos a los que apuntan (hijos primero)
+    private void collectOutputs(JsonNode module, String prefix, Map<String, Set<String>> vars,
+                                Map<String, Set<String>> outputs) {
         module.path("module_calls").fields().forEachRemaining(e -> {
             String childPrefix = prefix + "module." + e.getKey() + ".";
             JsonNode child = e.getValue().path("module");
-            collectOutputs(child, childPrefix, outputs);
+            Map<String, Set<String>> childVars = inputs(e.getValue(), prefix, vars, outputs);
+            collectOutputs(child, childPrefix, childVars, outputs);
             child.path("outputs").fields().forEachRemaining(o -> {
                 Set<String> refs = new LinkedHashSet<>();
                 collectRefs(o.getValue().path("expression"), refs);
                 Set<String> resolved = new LinkedHashSet<>();
-                for (String r : refs) resolved.addAll(resolve(r, childPrefix, outputs));
+                for (String r : refs) resolved.addAll(resolve(r, childPrefix, childVars, outputs));
                 outputs.put(childPrefix + o.getKey(), resolved);
             });
         });
     }
 
-    // "aws_vpc.main.id" → ["module.x.aws_vpc.main"]; "module.red.subnet_id" → recursos del output
-    private Set<String> resolve(String ref, String prefix, Map<String, Set<String>> outputs) {
-        String[] p = ref.split("\\.");
+    // "aws_vpc.main[0].id" → ["<prefijo>aws_vpc.main"]; "var.x" → lo que alimenta esa variable
+    private Set<String> resolve(String ref, String prefix, Map<String, Set<String>> vars,
+                                Map<String, Set<String>> outputs) {
+        String[] p = base(ref).split("\\.");   // sin índices: también cubre claves de for_each con puntos
         if (p.length < 2) return Set.of();
         switch (p[0]) {
-            case "var", "local", "data", "path", "each", "count", "self", "terraform": return Set.of();
+            case "var": return vars.getOrDefault(p[1], Set.of());
+            case "local", "data", "path", "each", "count", "self", "terraform": return Set.of();
             case "module":
                 return p.length >= 3
                     ? outputs.getOrDefault(prefix + "module." + p[1] + "." + p[2], Set.of())
