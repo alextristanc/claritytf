@@ -59,7 +59,7 @@ Ejecutar Terraform, conectarse a AWS, analizar costos, detectar vulnerabilidades
 | Frontend | React, **TypeScript**, Vite | `strict` desactivado al inicio; tipar `Node`, `Edge`, `ApiError`. |
 | Grafo | React Flow + **elkjs** | Plan B: nodos padre de React Flow con dagre. |
 | Tests frontend | Vitest | Sin configuración extra con Vite. |
-| Contenedor | Docker (solo backend) | Levantar con dos comandos. |
+| Contenedor | Docker (solo backend) | `docker compose up --build`; puerto configurable con `PORT`. |
 | CI | GitHub Actions | Build y tests de ambos lados, badge en el README. |
 | Deploy | Vercel o GitHub Pages | Solo frontend. |
 | Datos de prueba | Terraform CLI | `plan` sin `apply`. |
@@ -145,6 +145,18 @@ Ejecutar Terraform, conectarse a AWS, analizar costos, detectar vulnerabilidades
 6. elkjs calcula el layout y React Flow dibuja el grafo con módulos como contenedores y colores por acción.
 7. Clic en un nodo: se abre el panel de detalles y se resaltan sus dependientes (BFS hacia adelante). Clic en el fondo limpia la selección.
 
+### Ejecución local
+
+```bash
+# Backend con Java 21
+cd backend && mvn package && java -jar target/claritytf-backend.jar
+
+# O con Docker (backend en el puerto de PORT, 8080 por defecto)
+docker compose up --build
+```
+
+El puerto se toma de la variable `PORT` (default `8080`). `GET /health` responde `{"status":"ok"}` para comprobaciones de salud.
+
 ### Interacciones
 
 | Acción | Resultado |
@@ -204,14 +216,16 @@ claritytf/
 │   ├── Dockerfile                       
 │   └── src/
 │       ├── main/java/claritytf/
-│       │   ├── App.java                 Javalin: ruta /parse, CORS, límite de tamaño y errores (único archivo con framework)
+│       │   ├── App.java                 Javalin: rutas /parse y /health, CORS, límite de tamaño y errores (único archivo con framework)
 │       │   ├── PlanParser.java          Valida el plan y orquesta (Java puro)
 │       │   ├── GraphExtractor.java      Nodos, aristas y módulos (Java puro)
 │       │   ├── Model.java               Records anidados: Node, Edge, GraphModel
 │       │   └── PlanException.java       Código de error + mensaje
 │       └── test/
 │           ├── java/claritytf/
-│           │   └── PlanParserTest.java  Recorre todos los fixtures
+│           │   ├── PlanParserTest.java  Recorre todos los fixtures
+│           │   ├── AppTest.java         Contrato HTTP contra App.create()
+│           │   └── TestAssertions.java  Invariantes del grafo
 │           └── resources/fixtures/      Planes de prueba (válidos y rotos)
 ├── frontend/
 │   ├── package.json
@@ -231,6 +245,7 @@ claritytf/
 │   ├── plan.json                        Plan sanitizado
 │   └── errors/                          JSON roto, no-plan, plan vacío, .txt
 ├── .github/workflows/ci.yml             Build y tests de ambos lados
+├── docker-compose.yml                   Backend con el puerto de PORT
 ├── README.md
 ├── LICENSE
 └── .gitignore                           target/, node_modules/, .env, *.tfstate, *.tfplan
@@ -263,8 +278,8 @@ claritytf/
 - Sin conexión a AWS, costos, vulnerabilidades ni autenticación.
 
 **De los módulos**
-- Un nivel de anidación garantizado en la demo.
-- Si fallan las aristas entre módulos, se conectan a nivel de grupo (atajo con las `expressions` de `module_calls`).
+- Un nivel de anidación garantizado en la demo (el parser soporta más).
+- El `depends_on` entre módulos sí genera aristas: un módulo completo en el `depends_on` de un recurso o de una llamada expande a todos sus recursos (anidados incluidos). Una referencia `module.x` suelta dentro de una expresión no se expande; solo las salidas concretas (`module.x.output`) crean aristas.
 
 **De la arquitectura**
 - El backend es solo local: el sitio público muestra únicamente el ejemplo (modo demo).
@@ -274,7 +289,7 @@ claritytf/
 
 **Del plan JSON**
 - Los valores `known after apply` se muestran como desconocidos (vienen en `after_unknown`).
-- Dependencias por ID escrito a mano o por `data` sources no generan aristas.
+- Las dependencias por `data` sources no generan aristas.
 - Valores anidados enormes (políticas IAM, `user_data`) se truncan o se muestran colapsados.
 - Planes grandes se cargan, pero el grafo se vuelve ilegible: tope de 5 MB y aviso.
 - Planes sin cambios devuelven `EMPTY_PLAN`.
