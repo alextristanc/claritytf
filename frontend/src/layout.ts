@@ -1,4 +1,3 @@
-import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { GraphModel } from './types';
 
@@ -7,10 +6,11 @@ export const NODE_H = 50;
 
 export interface Box { x: number; y: number; width: number; height: number; }
 
-const elk = new ELK();
-
 // Devuelve posición y tamaño de cada nodo y módulo (coordenadas relativas al padre)
 export async function layout(model: GraphModel): Promise<Map<string, Box>> {
+  // Carga diferida: elkjs es la mayor parte del bundle y solo hace falta al dibujar.
+  const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
+  const elk = new ELK();
   const groups = new Map<string, ElkNode>();
   for (const m of model.modules) {
     groups.set(m.id, {
