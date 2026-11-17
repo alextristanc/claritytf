@@ -115,7 +115,7 @@ export default function Graph({ model, selected, onSelect }: Props) {
       onPaneClick={() => onSelect(null)}
     >
       <Background />
-      <Controls />
+      <Controls position="bottom-right" />
     </ReactFlow>
   );
 }
