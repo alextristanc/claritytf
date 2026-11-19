@@ -2,7 +2,7 @@ import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { GraphModel } from './types';
 
 export const NODE_W = 200;
-export const NODE_H = 50;
+export const NODE_H = 75;
 
 export interface Box { x: number; y: number; width: number; height: number; }
 

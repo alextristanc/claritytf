@@ -16,7 +16,7 @@ import type { Action, GraphModel } from './types';
 import { layout, NODE_W, NODE_H } from './layout';
 import type { Box } from './layout';
 import { dependents } from './useImpact';
-import { COLORS, GLYPHS } from './theme';
+import { COLORS, GLYPHS, logoForResource } from './theme';
 
 interface ResourceData {
   type: string;
@@ -46,14 +46,17 @@ function ModuleGroup({ data }: NodeProps) {
 function ResourceNode({ data }: NodeProps) {
   const d = data as unknown as ResourceData;
   const glyph = GLYPHS[d.action];
+  const logo = logoForResource(d.type);
   return (
-    <div className="node-card">
+    <div className="node-card" title={d.type}>
       <Handle type="target" position={Position.Left} className="tf-handle" />
-      <span className="node-type">
-        {glyph && <span className="node-glyph" title="Acciones distintas">{glyph}</span>}
-        <span className="node-type-text" title={d.type}>{d.type}</span>
+      <span className="node-provider-logo">
+        <img src={logo} alt="" className="node-logo" />
       </span>
-      <span className="node-name" title={d.name}>{d.name}</span>
+      <span className="node-name" title={d.name}>
+        {glyph && <span className="node-glyph" title="Acción distinta">{glyph}</span>}
+        {d.name}
+      </span>
       {d.instances > 1 && (
         <span className="node-badge" title={`${d.instances} instancias`}>×{d.instances}</span>
       )}
@@ -92,9 +95,10 @@ interface Props {
   model: GraphModel;
   selected: string | null;
   onSelect: (id: string | null) => void;
+  activeNodes: Set<string> | null;
 }
 
-export default function Graph({ model, selected, onSelect }: Props) {
+export default function Graph({ model, selected, onSelect, activeNodes }: Props) {
   const [boxes, setBoxes] = useState<Map<string, Box> | null>(null);
 
   useEffect(() => {
@@ -130,7 +134,9 @@ export default function Graph({ model, selected, onSelect }: Props) {
     const resourceNodes: Node[] = model.nodes.map(n => {
       const b = boxes.get(n.id);
       const parent = n.module && boxes.has(n.module) ? n.module : undefined;
-      const dim = impact !== null && !impact.has(n.id);
+      const byImpact = impact !== null && !impact.has(n.id);
+      const byFilter = activeNodes !== null && !activeNodes.has(n.id);
+      const dim = byImpact || byFilter;
       return {
         id: n.id,
         type: 'resource',
@@ -155,12 +161,14 @@ export default function Graph({ model, selected, onSelect }: Props) {
     });
 
     return [...groupNodes, ...resourceNodes]; // los padres van antes que sus hijos
-  }, [model, boxes, impact, selected]);
+  }, [model, boxes, impact, selected, activeNodes]);
 
   const edges: Edge[] = useMemo(
     () =>
       model.edges.map(e => {
-        const dim = impact !== null && !(impact.has(e.from) && impact.has(e.to));
+        const byImpact = impact !== null && !(impact.has(e.from) && impact.has(e.to));
+        const byFilter = activeNodes !== null && !(activeNodes.has(e.from) && activeNodes.has(e.to));
+        const dim = byImpact || byFilter;
         const active = impact !== null && !dim;
         const color = active ? '#22d3ee' : 'rgba(148, 163, 184, 0.5)';
         return {
@@ -176,7 +184,7 @@ export default function Graph({ model, selected, onSelect }: Props) {
           },
         };
       }),
-    [model, impact],
+    [model, impact, activeNodes],
   );
 
   if (!boxes) {

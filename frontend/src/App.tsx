@@ -3,6 +3,7 @@ import Graph from './Graph';
 import DetailsPanel from './DetailsPanel';
 import { DEFAULT_DEMO_ID, DEMOS, getDemo } from './demos';
 import { COLORS, GLYPHS, LABELS } from './theme';
+import { EMPTY_FILTER, type FilterState, activeNodeIds, hasFilter, MODULE_NONE } from './filter';
 import type { Action, ApiError, GraphModel } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
@@ -77,6 +78,7 @@ export default function App() {
   const [warningsDismissed, setWarningsDismissed] = useState(false);
   const [demoId, setDemoId] = useState(DEFAULT_DEMO_ID);
   const [dragActive, setDragActive] = useState(false);
+  const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -131,6 +133,16 @@ export default function App() {
         ...model.warnings,
       ]
     : [];
+
+  const activeNodes = model && hasFilter(filter)
+    ? activeNodeIds(model, filter)
+    : null;
+
+  const modules = model
+    ? [...new Set(model.nodes.map(n => n.module).filter((m): m is string => m !== null))].sort()
+    : [];
+  const types = model ? [...new Set(model.nodes.map(n => n.type))].sort() : [];
+  const actions = model ? [...new Set(model.nodes.map(n => n.action))].sort() : [];
 
   return (
     <div
@@ -202,6 +214,63 @@ export default function App() {
               {source === 'demo' ? 'Modo demo' : 'Backend local'}
             </span>
           )}
+
+          {model && !loading && (
+            <div className="filter-group" role="group" aria-label="Filtros de recursos">
+              <input
+                className="filter-input"
+                placeholder="Buscar nombre, tipo o dirección…"
+                value={filter.search}
+                onChange={e => setFilter({ ...filter, search: e.target.value })}
+                title="Filtra por nombre, tipo, id o dirección de instancia"
+              />
+              <select
+                className="filter-select"
+                value={filter.module}
+                onChange={e => setFilter({ ...filter, module: e.target.value })}
+                aria-label="Módulo"
+              >
+                <option value="">Todos módulos</option>
+                <option value={MODULE_NONE}>Sin módulo</option>
+                {modules.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <select
+                className="filter-select"
+                value={filter.type}
+                onChange={e => setFilter({ ...filter, type: e.target.value })}
+                aria-label="Tipo de recurso"
+              >
+                <option value="">Todos tipos</option>
+                {types.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select
+                className="filter-select"
+                value={filter.action}
+                onChange={e => setFilter({ ...filter, action: e.target.value })}
+                aria-label="Acción"
+              >
+                <option value="">Todas acciones</option>
+                {actions.map(a => <option key={a} value={a}>{LABELS[a] ?? a}</option>)}
+              </select>
+              {hasFilter(filter) && (
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setFilter(EMPTY_FILTER)}
+                  aria-label="Limpiar filtros"
+                  title="Limpiar filtros"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          {model && activeNodes && hasFilter(filter) && (
+            <span className="filter-count">
+              {activeNodes.size} de {model.nodes.length} recurso{model.nodes.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       </header>
 
@@ -258,7 +327,7 @@ export default function App() {
             <>
               <Legend />
               <div className="graph-canvas">
-                <Graph key={version} model={model} selected={selected} onSelect={setSelected} />
+                <Graph key={version} model={model} selected={selected} onSelect={setSelected} activeNodes={activeNodes} />
               </div>
             </>
           ) : (

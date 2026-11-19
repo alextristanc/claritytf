@@ -686,12 +686,13 @@ The Java backend is designed to run locally during development and demonstration
 - [x] GitHub Actions CI workflow.
 - [x] Docker support for the backend.
 - [x] GitHub Pages deployment workflow.
+- [x] Resource filtering and search (by module, type, action, and name).
 
 ### Potential future improvements
 
 - [ ] Infrastructure plan comparison.
+- [ ] Provider logos in resource nodes.
 - [ ] Graph export to PNG or SVG.
-- [ ] Resource filtering and search.
 - [ ] Additional visualization options.
 - [ ] Support for Terraform state files.
 - [ ] Improved handling of large infrastructure plans.
